@@ -42,7 +42,7 @@
 	
 	tileProjection = [[RMFractalTileProjection alloc] initFromProjection:[self projection] tileSideLength:kDefaultTileSize maxZoom:kDefaultMaxTileZoom minZoom:kDefaultMinTileZoom];
 	
-	networkOperations = TRUE;
+	networkOperations = FALSE;
 	
 	[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(networkOperationsNotification:) name:RMSuspendNetworkOperations object:nil];
 	[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(networkOperationsNotification:) name:RMResumeNetworkOperations object:nil];

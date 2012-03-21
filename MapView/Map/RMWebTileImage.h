@@ -32,6 +32,7 @@
 
 static const NSUInteger kWebTileRetries = 30;
 static const NSUInteger kMaxConcurrentConnections = 5;
+static const NSTimeInterval kWebTileRetryDelay = 1.0;
 
 extern NSString *RMWebTileImageErrorDomain;
 
@@ -49,7 +50,6 @@ extern NSString *RMWebTileImageNotificationErrorKey;
 /// RMTileImage subclass: a tile image loaded from a URL.
 @interface RMWebTileImage : RMTileImage {
     NSUInteger retries;
-    NSError *lastError;
 
 	NSURL *url;
     RMURLConnectionOperation *connectionOp;
@@ -59,6 +59,9 @@ extern NSString *RMWebTileImageNotificationErrorKey;
 
 - (id) initWithTile: (RMTile)tile FromURL:(NSString*)url;
 - (void) requestTile;
+- (void) retryTile:(NSError *)error;
+- (void) missingTile:(NSError *)error;
+- (void) errorTile:(NSError *)error;
 - (void) startLoading:(NSTimer *)timer;
 
 @end

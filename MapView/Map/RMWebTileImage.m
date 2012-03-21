@@ -50,20 +50,16 @@ static NSOperationQueue *_queue = nil;
 	if (![super initWithTile:_tile])
 		return nil;
 
-	[super displayProxy:[RMTileProxy loadingTile]];
+        [super displayProxy:[RMTileProxy loadingTile]];
 
-	
 	url = [[NSURL alloc] initWithString:urlStr];
-
-
-    connectionOp = nil;
-		
+    
+	connectionOp = nil;
+    
 	data =[[NSMutableData alloc] initWithCapacity:0];
-	
+    
 	retries = kWebTileRetries;
-	
-	[[NSNotificationCenter defaultCenter] postNotificationName:RMTileRequested object:self];
-
+        
 	[self requestTile];
 	
 	return self;
@@ -71,10 +67,9 @@ static NSOperationQueue *_queue = nil;
 
 - (void) dealloc
 {
-	[self cancelLoading];
-	
-    if ( lastError ) [lastError release]; lastError = nil;
-	
+	[connectionOp release];
+	connectionOp = nil;
+    
 	[data release];
 	data = nil;
 	
@@ -84,64 +79,71 @@ static NSOperationQueue *_queue = nil;
 	[super dealloc];
 }
 
+- (void) missingTile: (NSError *) error
+{
+    [self cancelLoading];
+    
+    [super displayProxy:[RMTileProxy missingTile]];
+   // [[NSNotificationCenter defaultCenter] postNotificationName:RMTileRetrieved object:self];
+    
+    [[NSNotificationCenter defaultCenter] postNotificationName:RMTileError object:self userInfo:[NSDictionary dictionaryWithObject:error forKey:RMWebTileImageNotificationErrorKey]];
+}
+
+- (void) errorTile: (NSError *) error
+{
+    [self cancelLoading];
+    
+    [super displayProxy:[RMTileProxy errorTile]];
+    //[[NSNotificationCenter defaultCenter] postNotificationName:RMTileRetrieved object:self];
+    
+    [[NSNotificationCenter defaultCenter] postNotificationName:RMTileError object:self userInfo:[NSDictionary dictionaryWithObject:error forKey:RMWebTileImageNotificationErrorKey]];
+}
+
+- (void) retryTile: (NSError *) error
+{   
+    [connectionOp stop];
+    
+    if(retries == 0) // No more retries
+    {
+        [self errorTile:error];
+    }
+    else 
+    {
+        retries--;		
+        
+        [connectionOp release];
+        [NSTimer scheduledTimerWithTimeInterval:kWebTileRetryDelay target:self selector:@selector(startLoading:) userInfo:nil repeats:NO];	
+    }
+}
+
 - (void) requestTile
 {
-	//RMLog(@"fetching: %@", url);
-	if(connectionOp) // re-request
-	{
-		//RMLog(@"Refetching: %@: %d", url, retries);
-		
-        [connectionOp cancel];
-		[connectionOp release];
-		connectionOp = nil;
-
-		if(retries == 0) // No more retries
-		{
-			[super displayProxy:[RMTileProxy errorTile]];
-			[[NSNotificationCenter defaultCenter] postNotificationName:RMTileRetrieved object:self];
-
-			[[NSNotificationCenter defaultCenter] postNotificationName:RMTileError object:self userInfo:[NSDictionary dictionaryWithObject:lastError forKey:RMWebTileImageNotificationErrorKey]];
-            [lastError autorelease]; lastError = nil;
-
-			return;
-		}
-		retries--;		
-
-		[NSTimer scheduledTimerWithTimeInterval:1.0 target:self selector:@selector(startLoading:) userInfo:nil repeats:NO];		
-	}
-	else 
-	{
-		[self startLoading:nil];
-	}
+    [self startLoading:nil];
 }
 
 - (void) startLoading:(NSTimer *)timer
 {
 	NSURLRequest *request = [NSURLRequest requestWithURL:url cachePolicy:NSURLRequestReloadIgnoringCacheData timeoutInterval:30.0];
-
-    connectionOp = [[RMURLConnectionOperation alloc] initWithRequest:request delegate:self];
     
+    connectionOp = [[RMURLConnectionOperation alloc] initWithRequest:request delegate:self];
+        
 	if (!connectionOp)
 	{
-		[super displayProxy:[RMTileProxy errorTile]];
-		[[NSNotificationCenter defaultCenter] postNotificationName:RMTileRetrieved object:self];
-	} else {
+        NSError *error = [NSError errorWithDomain:RMWebTileImageErrorDomain 
+                                             code:RMWebTileImageErrorNotFoundResponse
+                                         userInfo:[NSDictionary dictionaryWithObjectsAndKeys:
+                                                   NSLocalizedString(@"The RMURLConnectionOperation failed", @""), NSLocalizedDescriptionKey, nil]];
+        
+        [self errorTile:error];
+	} else 
+    {
         [_queue addOperation:connectionOp];
     }
 }
 
 - (void) cancelLoading
-{
-	if (!connectionOp)
-		return;
-	
-	[[NSNotificationCenter defaultCenter] postNotificationName:RMTileRetrieved object:self];
-	
+{	
     [connectionOp stop];	
-	[connectionOp release];
-	connectionOp = nil;
-    
-     if ( lastError ) [lastError release]; lastError = nil;
     
 	[super cancelLoading];
 }
@@ -169,38 +171,36 @@ static NSOperationQueue *_queue = nil;
     }
     
 	int statusCode = NSURLErrorUnknown; // unknown
-
+    
 	if([response isKindOfClass:[NSHTTPURLResponse class]])
-	  statusCode = [(NSHTTPURLResponse*)response statusCode];
-		
+        statusCode = [(NSHTTPURLResponse*)response statusCode];
+    
 	[data setLength:0];
 	
-        /// \bug magic number
+    /// \bug magic number
 	if(statusCode < 400) // Success
 	{
 	}
-        /// \bug magic number
+    /// \bug magic number
 	else if(statusCode == 404) // Not Found
 	{
-        [super displayProxy:[RMTileProxy missingTile]];
         
         NSError *error = [NSError errorWithDomain:RMWebTileImageErrorDomain 
                                              code:RMWebTileImageErrorNotFoundResponse
                                          userInfo:[NSDictionary dictionaryWithObjectsAndKeys:
-                                                   NSLocalizedString(@"The requested tile was not found on the server", @""), NSLocalizedDescriptionKey, nil]];
-        
-        [[NSNotificationCenter defaultCenter] postNotificationName:RMTileError object:self userInfo:[NSDictionary dictionaryWithObject:error forKey:RMWebTileImageNotificationErrorKey]];
-		[self cancelLoading];
+                                                   NSLocalizedString(@"The requested tile was not found on the server", @""), NSLocalizedDescriptionKey, nil]];   
+        [_connection cancel];
+        [self missingTile:error];
 	}
 	else // Other Error
 	{
 		//RMLog(@"didReceiveResponse %@ %d", _connection, statusCode);
-
+        
 		BOOL retry = FALSE;
 		
 		switch(statusCode)
 		{
-                        /// \bug magic number
+                /// \bug magic number
 			case 500: retry = TRUE; break;
 			case 503: retry = TRUE; break;
 		}
@@ -213,14 +213,12 @@ static NSOperationQueue *_queue = nil;
         
 		if(retry)
 		{
-            if ( lastError ) [lastError release];
-            lastError = [error retain];
-			[self requestTile];
+			[self retryTile:error];
 		}
 		else 
 		{
-			[[NSNotificationCenter defaultCenter] postNotificationName:RMTileError object:self userInfo:[NSDictionary dictionaryWithObject:error forKey:RMWebTileImageNotificationErrorKey]];
-			[self cancelLoading];
+            [_connection cancel];
+            [self errorTile:error];
 		}
 	}
 }
@@ -243,30 +241,26 @@ static NSOperationQueue *_queue = nil;
 	
 	switch([error code])
 	{
-          case NSURLErrorBadURL:                      // -1000
-          case NSURLErrorTimedOut:                    // -1001
-          case NSURLErrorUnsupportedURL:              // -1002
-          case NSURLErrorCannotFindHost:              // -1003
-          case NSURLErrorCannotConnectToHost:         // -1004
-          case NSURLErrorNetworkConnectionLost:       // -1005
-          case NSURLErrorDNSLookupFailed:             // -1006
-          case NSURLErrorResourceUnavailable:         // -1008
-          case NSURLErrorNotConnectedToInternet:      // -1009
+        case NSURLErrorBadURL:                      // -1000
+        case NSURLErrorTimedOut:                    // -1001
+        case NSURLErrorUnsupportedURL:              // -1002
+        case NSURLErrorCannotFindHost:              // -1003
+        case NSURLErrorCannotConnectToHost:         // -1004
+        case NSURLErrorNetworkConnectionLost:       // -1005
+        case NSURLErrorDNSLookupFailed:             // -1006
+        case NSURLErrorResourceUnavailable:         // -1008
+        case NSURLErrorNotConnectedToInternet:      // -1009
             retry = TRUE; 
             break;
 	}
 	
 	if(retry)
 	{
-        if ( lastError ) [lastError release];
-        lastError = [error retain];
-        
-		[self requestTile];
+		[self retryTile:error];
 	}
 	else 
 	{
-		[[NSNotificationCenter defaultCenter] postNotificationName:RMTileError object:self userInfo:[NSDictionary dictionaryWithObject:error forKey:RMWebTileImageNotificationErrorKey]];
-		[self cancelLoading];
+        [self errorTile:error];
 	}
 }
 
@@ -282,36 +276,25 @@ static NSOperationQueue *_queue = nil;
     {
 		//RMLog(@"connectionDidFinishLoading %@ data size %d", _connection, [data length]);
         
-        if ( lastError ) [lastError release];
-        lastError = [[NSError errorWithDomain:RMWebTileImageErrorDomain 
-                                         code:RMWebTileImageErrorZeroLengthResponse
-                                     userInfo:[NSDictionary dictionaryWithObjectsAndKeys:
-                                               NSLocalizedString(@"The server returned a zero-length response", @""), NSLocalizedDescriptionKey, nil]] retain];
-		[self requestTile];
+        NSError *error = [[NSError errorWithDomain:RMWebTileImageErrorDomain 
+                                              code:RMWebTileImageErrorZeroLengthResponse
+                                          userInfo:[NSDictionary dictionaryWithObjectsAndKeys:
+                                                    NSLocalizedString(@"The server returned a zero-length response", @""), NSLocalizedDescriptionKey, nil]] retain];
+		[self retryTile:error];
 	}
 	else
 	{
-		if ( ![self updateImageUsingData:data] ) {
-            if ( lastError ) [lastError release];
-            lastError = [[NSError errorWithDomain:RMWebTileImageErrorDomain 
-                                             code:RMWebTileImageErrorUnexpectedHTTPResponse
-                                         userInfo:[NSDictionary dictionaryWithObjectsAndKeys:
-                                                   NSLocalizedString(@"The server returned an invalid response", @""), NSLocalizedDescriptionKey, nil]] retain];
-            [self requestTile];
-            return;
+		if ( ![self updateImageUsingData:data] ) 
+        {
+            NSError *error = [[NSError errorWithDomain:RMWebTileImageErrorDomain 
+                                                  code:RMWebTileImageErrorUnexpectedHTTPResponse
+                                              userInfo:[NSDictionary dictionaryWithObjectsAndKeys:
+                                                        NSLocalizedString(@"The server returned an invalid response", @""), NSLocalizedDescriptionKey, nil]] retain];
+            [self retryTile:error];
         }
-		
-		[data release];
-		data = nil;
-		[url release];
-		url = nil;
-        [connectionOp stop];
-		[connectionOp release];
-		connectionOp = nil;
- 
-		if ( lastError ) [lastError release]; lastError = nil;
-        
-		[[NSNotificationCenter defaultCenter] postNotificationName:RMTileRetrieved object:self];
+        else {
+            //[[NSNotificationCenter defaultCenter] postNotificationName:RMTileRetrieved object:self];
+        }
 	}
 }
 

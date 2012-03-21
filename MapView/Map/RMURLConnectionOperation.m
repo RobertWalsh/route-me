@@ -26,6 +26,7 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #import "RMURLConnectionOperation.h"
+#import "RMNotifications.h"
 
 @implementation RMURLConnectionOperation
 
@@ -33,8 +34,10 @@
     if((self = [super init]))
     {
         _delegate = delegate;
+        _connection = nil;
         _request = [request retain];
         _isRunning = YES;
+
     }
     return self;
 }
@@ -44,9 +47,16 @@
     {
         return;
     }
+    [[NSNotificationCenter defaultCenter] postNotificationName:RMTileRequested object:self];
+
     _connection = [[NSURLConnection alloc] initWithRequest:_request delegate:_delegate startImmediately:YES];
+    
     [_request release];_request = nil;
+    
     while (_isRunning && ![self isCancelled] && [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate distantFuture]]);
+   
+    [[NSNotificationCenter defaultCenter] postNotificationName:RMTileRetrieved object:self];
+
     [_connection cancel];
     [_connection release];
     _connection = nil; 
