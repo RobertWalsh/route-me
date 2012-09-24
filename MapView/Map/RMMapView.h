@@ -128,7 +128,6 @@ typedef struct {
         CGFloat rotation;
     float screenScale;
 	
-@private
    	BOOL _delegateHasBeforeMapMove;
 	BOOL _delegateHasAfterMapMove;
 	BOOL _delegateHasBeforeMapZoomByFactor;
@@ -149,6 +148,7 @@ typedef struct {
 	NSTimer *_decelerationTimer;
 	CGSize _decelerationDelta;
 	
+@private
 	BOOL _constrainMovement;
 	RMProjectedPoint NEconstraint, SWconstraint;
 	

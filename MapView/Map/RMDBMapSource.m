@@ -129,8 +129,8 @@
 			center.longitude = [self getPreferenceAsFloat:kCoverageCenterLongitudeKey];
 			
 			RMLog(@"Tile size: %d pixel", tileSideLength);
-			RMLog(@"Supported zoom range: %d - %d", minZoom, maxZoom);
-			RMLog(@"Coverage area: (%2.6f,%2.6f) x (%2.6f,%2.6f)", 
+			RMLog(@"Supported zoom range: %f - %f", minZoom, maxZoom);
+			RMLog(@"Coverage area: (%2.6f,%2.6f) x (%2.6f,%2.6f)",
 				  topLeft.latitude, 
 				  topLeft.longitude,
 				  bottomRight.latitude, 
@@ -146,6 +146,35 @@
 		tileProjection = [[RMFractalTileProjection alloc] initFromProjection:[self projection] tileSideLength:tileSideLength maxZoom:maxZoom minZoom:minZoom];		
 	}
 	return self;
+}
+
+-(id)initWithFullPath:(NSString*)fullPath
+{
+    self = [super init];
+    if (self != nil) {
+        db = [[FMDatabase alloc] initWithPath:fullPath];
+        if ([db open]) {
+            
+            // get the tile side length
+            tileSideLength = [self getPreferenceAsInt:kTileSideLengthKey];
+            
+            // get the supported zoom levels
+            minZoom = [self getPreferenceAsFloat:kMinZoomKey];
+            maxZoom = [self getPreferenceAsFloat:kMaxZoomKey];
+            
+            // get the coverage area
+            topLeft.latitude = [self getPreferenceAsFloat:kCoverageTopLeftLatitudeKey];
+            topLeft.longitude = [self getPreferenceAsFloat:kCoverageTopLeftLongitudeKey];
+            bottomRight.latitude = [self getPreferenceAsFloat:kCoverageBottomRightLatitudeKey];
+            bottomRight.longitude = [self getPreferenceAsFloat:kCoverageBottomRightLatitudeKey];
+            center.latitude = [self getPreferenceAsFloat:kCoverageCenterLatitudeKey];
+            center.longitude = [self getPreferenceAsFloat:kCoverageCenterLongitudeKey];
+        }
+        
+        // init the tile projection
+        tileProjection = [[RMFractalTileProjection alloc] initFromProjection:[self projection] tileSideLength:tileSideLength maxZoom:maxZoom minZoom:minZoom];
+    }
+    return self;
 }
 
 -(void) dealloc {

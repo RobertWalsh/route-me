@@ -48,6 +48,7 @@
 	CLLocationCoordinate2D center;
 }
 
+-(id)initWithFullPath:(NSString*)fullPath;
 -(id)initWithPath:(NSString*)path;
 
 -(int)tileSideLength;
